@@ -1,6 +1,7 @@
 import { FontAwesome5 } from '@expo/vector-icons';
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -11,46 +12,35 @@ import {
   View,
 } from 'react-native';
 
-import {
-  addTask,
-  deleteTask,
-  getTasksByStatus,
-  markTaskDone,
-  Task,
-} from '@/store/tasks.store';
+import { addTask } from '@/store/tasksSlice';
+import { useDispatch } from 'react-redux';
 
-function useTasks() {
-  const [, setRefresh] = useState(0);
 
-  const refresh = useCallback(() => {
-    setRefresh(prev => prev + 1);
-  }, []);
 
-  const currentTasks = getTasksByStatus('current');
-  const upcomingTasks = getTasksByStatus('upcoming');
-  const completedTasks = getTasksByStatus('completed');
+import CompletedTasksSection from '@/components/completed-tasks-section';
+import CurrentTasksSection from '@/components/current-tasks-section';
+import UpcomingTasksSection from '@/components/upcoming-tasks-section';
+import useRequireAuth from '@/hooks/useRequireAuth';
+import useTasks from '@/hooks/useTask';
 
-  return {
-    currentTasks,
-    upcomingTasks,
-    completedTasks,
-    refresh,
-  };
-}
+
+
 
 export default function Tasks() {
-  const { currentTasks, upcomingTasks, completedTasks, refresh } = useTasks();
+  useRequireAuth();
+  const { currentTasks, upcomingTasks, completedTasks } = useTasks();
   const [showAddModal, setShowAddModal] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
 
-  const handleAddTask = useCallback(() => {
-    if (taskTitle.trim()) {
-      addTask(taskTitle, 'current');
-      setTaskTitle('');
-      setShowAddModal(false);
-      refresh();
-    }
-  }, [taskTitle, refresh]);
+  const dispatch = useDispatch();
+
+  const handleAddTask = () => {
+  if (taskTitle.trim()) {
+    dispatch(addTask(taskTitle));
+    setTaskTitle('');
+    setShowAddModal(false);
+  }
+};
 
   const totalPending = currentTasks.length + upcomingTasks.length;
   const totalCompleted = completedTasks.length;
@@ -82,70 +72,13 @@ export default function Tasks() {
           contentContainerStyle={styles.scrollContent}
         >
           {/* Current Tasks */}
-          <Section
-            title="Current Tasks"
-            items={currentTasks}
-            icon="circle"
-            color="#3B82F6"
-            count={currentTasks.length}
-          >
-            {currentTasks.map((task) => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                onDone={() => {
-                  markTaskDone(task.id);
-                  refresh();
-                }}
-                onDelete={() => {
-                  deleteTask(task.id);
-                  refresh();
-                }}
-              />
-            ))}
-          </Section>
+          <CurrentTasksSection tasks={currentTasks} />
 
           {/* Upcoming Tasks */}
-          <Section
-            title="Upcoming Tasks"
-            items={upcomingTasks}
-            icon="clock"
-            color="#F59E0B"
-            count={upcomingTasks.length}
-          >
-            {upcomingTasks.map((task) => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                muted
-                onDelete={() => {
-                  deleteTask(task.id);
-                  refresh();
-                }}
-              />
-            ))}
-          </Section>
+          <UpcomingTasksSection tasks={upcomingTasks} />
 
           {/* Completed Tasks */}
-          <Section
-            title="Completed Tasks"
-            items={completedTasks}
-            icon="check-circle"
-            color="#10B981"
-            count={completedTasks.length}
-          >
-            {completedTasks.map((task) => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                completed
-                onDelete={() => {
-                  deleteTask(task.id);
-                  refresh();
-                }}
-              />
-            ))}
-          </Section>
+          <CompletedTasksSection tasks={completedTasks} />
 
           {/* Empty State */}
           {totalPending === 0 && totalCompleted === 0 && (
@@ -167,8 +100,8 @@ export default function Tasks() {
         animationType="fade"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior="padding">
+          <KeyboardAvoidingView style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add New Task</Text>
               <TouchableOpacity
@@ -212,103 +145,12 @@ export default function Tasks() {
                 <Text style={styles.addButtonText}>Add Task</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
 }
-
-/* ---------- Components ---------- */
-
-function Section({
-  title,
-  items,
-  children,
-  icon,
-  color,
-  count,
-}: {
-  title: string;
-  items: any[];
-  children: React.ReactNode;
-  icon?: string;
-  color?: string;
-  count?: number;
-}) {
-  if (!items || items.length === 0) return null;
-
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        {icon && <FontAwesome5 name={icon} size={16} color={color} />}
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {count !== undefined && (
-          <View style={[styles.countBadge, { backgroundColor: color }]}>
-            <Text style={styles.countBadgeText}>{count}</Text>
-          </View>
-        )}
-      </View>
-      {children}
-    </View>
-  );
-}
-
-function TaskItem({
-  task,
-  completed,
-  muted,
-  onDone,
-  onDelete,
-}: {
-  task: Task;
-  completed?: boolean;
-  muted?: boolean;
-  onDone?: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <View
-      style={[
-        styles.taskCard,
-        completed && styles.completedTask,
-        muted && styles.mutedTask,
-      ]}
-    >
-      <View style={styles.taskContent}>
-        <View style={[styles.taskDot, completed && styles.completedDot]} />
-        <Text
-          style={[styles.taskText, completed && styles.completedText]}
-          numberOfLines={2}
-        >
-          {task.title}
-        </Text>
-      </View>
-
-      <View style={styles.actions}>
-        {!completed && onDone && (
-          <TouchableOpacity
-            onPress={onDone}
-            style={styles.iconBtn}
-            activeOpacity={0.7}
-          >
-            <FontAwesome5 name="check" size={16} color="#10B981" />
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          onPress={onDelete}
-          style={styles.iconBtn}
-          activeOpacity={0.7}
-        >
-          <FontAwesome5 name="trash-alt" size={14} color="#EF4444" />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-/* ---------- Styles ---------- */
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -373,111 +215,6 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
 
-  section: {
-    marginBottom: 28,
-  },
-
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-    gap: 8,
-  },
-
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1F2937',
-    flex: 1,
-    letterSpacing: 0.2,
-  },
-
-  countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  countBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-
-  taskCard: {
-    backgroundColor: '#fff',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderLeftWidth: 4,
-    borderLeftColor: '#3B82F6',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-
-  taskContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-
-  taskDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#3B82F6',
-    opacity: 0.6,
-  },
-
-  completedDot: {
-    backgroundColor: '#10B981',
-    opacity: 1,
-  },
-
-  taskText: {
-    fontSize: 15,
-    color: '#1F2937',
-    flex: 1,
-    fontWeight: '500',
-    lineHeight: 20,
-  },
-
-  actions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-
-  iconBtn: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.03)',
-  },
-
-  completedTask: {
-    backgroundColor: '#F0FDF4',
-    borderLeftColor: '#10B981',
-    opacity: 0.85,
-  },
-
-  completedText: {
-    textDecorationLine: 'line-through',
-    color: '#9CA3AF',
-    fontWeight: '400',
-  },
-
-  mutedTask: {
-    opacity: 0.65,
-  },
 
   emptyState: {
     alignItems: 'center',
